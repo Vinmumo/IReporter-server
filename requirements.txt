@@ -8,3 +8,4 @@ Flask-RESTful
 sendgrid
 cloudinary
 python-dotenv
+gunicorn
