@@ -14,6 +14,6 @@ def create_app():
         from .routes import auth_routes, record_routes
         
         app.register_blueprint(auth_routes.auth_bp)
-        app.register_blueprint(record_routes.record_bp)
+        # app.register_blueprint(record_routes.record_bp)
     
     return app
