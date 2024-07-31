@@ -12,6 +12,7 @@ werkzeug = "*"
 sqlalchemy-serializer = "*"
 flask-restful = "*"
 sendgrid = "*"
+gunicorn = "*"
 
 [dev-packages]
 
