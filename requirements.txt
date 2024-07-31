@@ -1,0 +1,10 @@
+Flask
+Flask-SQLAlchemy
+Flask-Migrate
+Flask-Cors
+Werkzeug
+SQLAlchemy-Serializer
+Flask-RESTful
+sendgrid
+cloudinary
+python-dotenv
