@@ -13,6 +13,7 @@ sqlalchemy-serializer = "*"
 flask-restful = "*"
 sendgrid = "*"
 gunicorn = "*"
+flake8 = "*"
 
 [dev-packages]
 
