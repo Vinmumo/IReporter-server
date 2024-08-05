@@ -1,3 +1,5 @@
+
+import uuid
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -8,12 +10,18 @@ class User(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), nullable=False, unique=True)
+    public_id = db.column(db.String(36, unique=True, nullable=False))
     email = db.Column(db.String(120), nullable=False, unique=True)
     password_hash = db.Column(db.String(128), nullable=False)
     is_admin = db.Column(db.Boolean, default=False)  # Change to Boolean
     worker_id = db.Column(db.Integer)
     created_at = db.Column(db.DateTime, default=datetime.now)
     records = db.relationship('Record', backref='user', lazy=True)
+    
+    def __init__(self, **kwargs):
+        super(User, self).__init__(**kwargs) #Initialize parent class
+        self.public_id = str(uuid.uui) #Generate unique public id
+
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
