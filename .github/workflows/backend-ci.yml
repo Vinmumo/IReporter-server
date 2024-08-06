@@ -75,7 +75,8 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           FLASK_APP: app
         run: |
-            flask db upgrade
+          cd server
+          flask db upgrade
 
       - name: Deploy to Render
         env:
