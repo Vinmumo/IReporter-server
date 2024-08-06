@@ -10,3 +10,4 @@ cloudinary
 python-dotenv
 gunicorn
 flake8
+psycopg2-binary
