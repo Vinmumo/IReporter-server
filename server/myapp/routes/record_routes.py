@@ -5,7 +5,7 @@ from ..models.video import Video
 from ..services.cloudinary_services import upload_file
 # import cloudinary.uploader
 
-record_bp = Blueprint('record', __name__)
+record_bp = Blueprint('record_bp', __name__)
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'mp4', 'mov'}
 
