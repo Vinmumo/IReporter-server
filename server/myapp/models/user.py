@@ -28,3 +28,14 @@ class User(db.Model):
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+    
+    def serialize(self):
+        return {
+            'id': self.id,
+            'username': self.username,
+            'public_id': self.public_id,
+            'email': self.email,
+            'is_admin': self.is_admin,
+            'worker_id': self.worker_id,
+            'created_at': self.created_at.isoformat()  # Converting datetime to a string
+        }

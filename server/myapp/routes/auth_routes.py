@@ -4,6 +4,19 @@ from ..models.user import User, db
 
 auth_bp = Blueprint('auth_bp', __name__)
 
+# Get all users
+@auth_bp.route('/users', methods=['GET'])
+def get_users():
+    users = User.query.all()
+    users_list = [user.serialize() for user in users]
+    return jsonify(users_list)
+
+# Get user by ID
+@auth_bp.route('/users/<int:id>', methods=['GET'])
+def get_user(id):
+    user = User.query.get_or_404(id)
+    return jsonify(user.serialize())
+
 
 @auth_bp.route('/register', methods=['POST'])
 def register():
