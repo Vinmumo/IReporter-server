@@ -10,9 +10,9 @@ class User(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), nullable=False, unique=True)
-    public_id = db.column(db.String(36, unique=True, nullable=False))
+    public_id = db.Column(db.String(36), unique=True, nullable=False)
     email = db.Column(db.String(120), nullable=False, unique=True)
-    password_hash = db.Column(db.String(128), nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
     is_admin = db.Column(db.Boolean, default=False)  # Change to Boolean
     worker_id = db.Column(db.Integer)
     created_at = db.Column(db.DateTime, default=datetime.now)
@@ -20,7 +20,7 @@ class User(db.Model):
     
     def __init__(self, **kwargs):
         super(User, self).__init__(**kwargs) #Initialize parent class
-        self.public_id = str(uuid.uui) #Generate unique public id
+        self.public_id = str(uuid.uuid4()) #Generate unique public id
 
 
     def set_password(self, password):
