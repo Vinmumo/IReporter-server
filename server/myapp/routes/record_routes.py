@@ -1,101 +1,68 @@
-from flask import Blueprint, request, jsonify
+from flask import request
+from flask_restx import Namespace, Resource, fields, marshal
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models.record import Record, db
-from ..models.image import Image
 from ..models.video import Video
-from ..services.cloudinary_services import upload_file
-# import cloudinary.uploader
+from ..models.user import User
+from myapp.services.cloudinary_services import upload_file
 
-record_bp = Blueprint('record_bp', __name__)
+api = Namespace('videos', description='Video operations')
 
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'mp4', 'mov'}
+video_model = api.model('Video', {
+    'id': fields.Integer(readonly=True, description='The video identifier'),
+    'url': fields.String(required=True, description='The video URL'),
+    'record_id': fields.Integer(required=True, description='The associated record identifier')
+})
 
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-@record_bp.route('/add_record', methods=['POST'])
-def add_record():
-    title = request.form['title']
-    description = request.form['description']
-    location = request.form['location']
-    user_id = request.form['user_id']
-    image_file = request.files.get('image')
-    video_file = request.files.get('video')
-
-    new_record = Record(title=title, description=description, location=location, user_id=user_id)
-    db.session.add(new_record)
-    db.session.commit()  # Save the record first to get the id
-
-    if image_file and allowed_file(image_file.filename):
-        upload_result = upload_file(image_file)
-        image_url = upload_result['secure_url']
-        new_image = Image(url=image_url, record_id=new_record.id)
-        db.session.add(new_image)
-
-    if video_file and allowed_file(video_file.filename):
+@api.route('')
+class VideoList(Resource):
+    @api.doc('create_video')
+    @api.expect(api.parser()
+                .add_argument('video', type='file', location='files', required=True)
+                .add_argument('record_id', type=int, required=True, help='The associated record identifier'))
+    @api.marshal_with(video_model, code=201)
+    @jwt_required()
+    def post(self):
+        current_user = self._get_current_user()
+        record_id = request.form['record_id']
+        record = Record.query.get_or_404(record_id)
+        if record.user_public_id != current_user.public_id:
+            api.abort(403, 'Unauthorized')
+        video_file = request.files['video']
         upload_result = upload_file(video_file, resource_type='video')
-        video_url = upload_result['secure_url']
-        new_video = Video(url=video_url, record_id=new_record.id)
+        new_video = Video(url=upload_result['secure_url'], record_id=record_id, user_public_id=current_user.public_id)
         db.session.add(new_video)
+        db.session.commit()
+        return new_video, 201
 
-    db.session.commit()
+    def _get_current_user(self):
+        current_user_public_id = get_jwt_identity()
+        return User.query.filter_by(public_id=current_user_public_id).first_or_404()
 
-    return jsonify({"message": "Record added successfully"}), 201
+@api.route('/<int:id>')
+@api.param('id', 'The video identifier')
+class VideoItem(Resource):
+    @api.doc('get_video')
+    @api.marshal_with(video_model)
+    @jwt_required()
+    def get(self, id):
+        video = Video.query.get_or_404(id)
+        return video
 
-@record_bp.route('/records', methods=['GET'])
-def get_all_records():
-    records = Record.query.all()
-    records_list = []
-    for record in records:
-        record_data = {
-            "id": record.id,
-            "title": record.title,
-            "description": record.description,
-            "location": record.location,
-            "user_id": record.user_id,
-            "status": record.status,
-            "created_at": record.created_at,
-            "images": [{"id": img.id, "url": img.url} for img in record.images],
-            "videos": [{"id": vid.id, "url": vid.url} for vid in record.videos]
-        }
-        records_list.append(record_data)
-    
-    return jsonify(records_list), 200
+    @api.doc('delete_video')
+    @api.response(200, 'Video deleted successfully')
+    @api.response(403, 'Unauthorized')
+    @api.response(404, 'Video not found')
+    @jwt_required()
+    def delete(self, id):
+        current_user = VideoList._get_current_user(self)
+        video = Video.query.get_or_404(id)
+        if video.user_public_id != current_user.public_id:
+            api.abort(403, 'Unauthorized')
+        db.session.delete(video)
+        db.session.commit()
+        return {'message': 'Video deleted'}, 200
 
-
-@record_bp.route('/records/<int:id>', methods=['GET'])
-def get_record(id):
-    record = Record.query.get_or_404(id)
-    return jsonify({
-        "id": record.id,
-        "title": record.title,
-        "description": record.description,
-        "location": record.location,
-        "user_id": record.user_id,
-        "status": record.status,
-        "created_at": record.created_at,
-        "images": [{"id": img.id, "url": img.url} for img in record.images],
-        "videos": [{"id": vid.id, "url": vid.url} for vid in record.videos]
-    }), 200
-
-@record_bp.route('/records/<int:id>', methods=['PUT'])
-def update_record(id):
-    record = Record.query.get_or_404(id)
-    record.title = request.form['title']
-    record.description = request.form['description']
-    record.location = request.form['location']
-    record.status = request.form['status']
-    db.session.commit()
-    return jsonify({"message": "Record updated"}), 200
-
-# @record_bp.route('/records/<int:id>', methods=['DELETE'])
-# def delete_record(id):
-#     record = Record.query.get_or_404(id)
-#     for img in record.images:
-#         cloudinary.uploader.destroy(img.url)
-#         db.session.delete(img)
-#     for vid in record.videos:
-#         cloudinary.uploader.destroy(vid.url, resource_type='video')
-#         db.session.delete(vid)
-#     db.session.delete(record)
-#     db.session.commit()
-#     return jsonify({"message": "Record deleted"}), 200
+@api.errorhandler(Exception)
+def handle_exception(error):
+    return {'message': str(error)}, getattr(error, 'code', 500)

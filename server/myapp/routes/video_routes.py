@@ -1,37 +1,73 @@
-from flask import Blueprint, request, jsonify
+from flask import request
+from flask_restx import Namespace, Resource, fields, marshal
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models.record import Record, db
-from ..models.image import Image
 from ..models.video import Video
-from ..services.cloudinary_services import upload_file
+from ..models.user import User
+from myapp.services.cloudinary_services import upload_file
 
-video_bp = Blueprint('video_bp', __name__)
+api = Namespace('videos', description='Video operations')
 
-@video_bp.route('/videos', methods=['POST'])
-def create_video():
-    record_id = request.form['record_id']
-    video_file = request.files['video']
-    upload_result = upload_file(video_file, resource_type='video')
-    video_url = upload_result['secure_url']
-    new_video = Video(url=video_url, record_id=record_id)
-    db.session.add(new_video)
-    db.session.commit()
-    return jsonify({"message": "Video uploaded", "video": new_video.id}), 201
+video_model = api.model('Video', {
+    'id': fields.Integer(readonly=True, description='The video identifier'),
+    'url': fields.String(required=True, description='The video URL'),
+    'record_id': fields.Integer(required=True, description='The associated record identifier')
+})
 
-@video_bp.route('/videos/<int:id>', methods=['GET'])
-def get_video(id):
-    video = Video.query.get_or_404(id)
-    return jsonify({
-        "id": video.id,
-        "url": video.url,
-        "record_id": video.record_id
-    }), 200
+@api.route('')
+class VideoList(Resource):
+    @api.doc('create_video')
+    @api.expect(video_model)
+    @jwt_required()
+    def post(self):
+        current_user_public_id = get_jwt_identity()
+        user = User.query.filter_by(public_id=current_user_public_id).first()
+        record_id = request.form['record_id']
+        record = Record.query.get_or_404(record_id)
+        if record.user_public_id != user.public_id:
+            return {'error': 'Unauthorized'}, 403
+        video_file = request.files['video']
+        upload_result = upload_file(video_file, resource_type='video')
+        new_video = Video(url=upload_result['secure_url'], record_id=record_id, user_public_id=user.public_id)
+        db.session.add(new_video)
+        db.session.commit()
+        return {'message': 'Video uploaded', 'video': marshal(new_video, video_model)}, 201
 
+@api.route('/<int:id>')
+@api.param('id', 'The video identifier')
+class VideoItem(Resource):
+    @api.doc('get_video')
+    @api.marshal_with(video_model)
+    @jwt_required()
+    def get(self, id):
+        video = Video.query.get_or_404(id)
+        return marshal(video, video_model)
 
+    @api.doc('update_video')
+    @api.expect(video_model)
+    @api.marshal_with(video_model)
+    @jwt_required()
+    def put(self, id):
+        current_user_public_id = get_jwt_identity()
+        user = User.query.filter_by(public_id=current_user_public_id).first()
+        video = Video.query.get_or_404(id)
+        if video.user_public_id != user.public_id:
+            return {'error': 'Unauthorized'}, 403
+        video_file = request.files['video']
+        upload_result = upload_file(video_file, resource_type='video')
+        video.url = upload_result['secure_url']
+        video.record_id = request.form['record_id']
+        db.session.commit()
+        return marshal(video, video_model)
 
-@video_bp.route('/videos/<int:id>', methods=['DELETE'])
-def delete_video(id):
-    video = Video.query.get_or_404(id)
-    upload_file(video.url, resource_type='video')
-    db.session.delete(video)
-    db.session.commit()
-    return jsonify({"message": "Video deleted"}), 200
+    @api.doc('delete_video')
+    @jwt_required()
+    def delete(self, id):
+        current_user_public_id = get_jwt_identity()
+        user = User.query.filter_by(public_id=current_user_public_id).first()
+        video = Video.query.get_or_404(id)
+        if video.user_public_id != user.public_id:
+            return {'error': 'Unauthorized'}, 403
+        db.session.delete(video)
+        db.session.commit()
+        return {'message': 'Video deleted'}, 200
