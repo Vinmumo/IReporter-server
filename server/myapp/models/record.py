@@ -10,5 +10,5 @@ class Record(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     status = db.Column(db.String(120))
     created_at = db.Column(db.DateTime, default=datetime.now)
-    images = db.relationship('Image', backref='record', lazy=True)
-    videos = db.relationship('Video', backref='record', lazy=True)
+    images = db.relationship('Image', backref='record', lazy=True,cascade='all, delete-orphan')
+    videos = db.relationship('Video', backref='record', lazy=True,cascade='all, delete-orphan')
