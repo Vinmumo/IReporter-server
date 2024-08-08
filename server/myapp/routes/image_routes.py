@@ -1,47 +1,70 @@
-from flask import Blueprint, request, jsonify
+from flask import request
+from flask_restx import Namespace, Resource, fields
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models.image import Image, db
-from ..services.cloudinary_services import upload_file
+from ..models.user import User
+from myapp.services.cloudinary_services import upload_file
 
+api = Namespace('images', description='Image operations')
 
-image_bp = Blueprint('image_bp', __name__)
+image_model = api.model('Image', {
+    'id': fields.Integer(readonly=True, description='The image identifier'),
+    'url': fields.String(required=True, description='The image URL'),
+    'record_id': fields.Integer(required=True, description='The associated record identifier')
+})
 
-# Get all images
-@image_bp.route('/images', methods=['GET'])
-def get_images():
-    images = Image.query.all()
-    return jsonify([image.to_dict() for image in images]), 200
+api.models[image_model.name] = image_model
 
-# Get images by record_id
-@image_bp.route('/records/<int:record_id>/images', methods=['GET'])
-def get_images_by_record(record_id):
-    images = Image.query.filter_by(record_id=record_id).all()
-    return jsonify([image.to_dict() for image in images]), 200
+@api.route('')
+class ImageList(Resource):
+    @api.doc('get_images')
+    @api.marshal_list_with(image_model)
+    @jwt_required()
+    def get(self):
+        current_user = self._get_current_user()
+        images = Image.query.filter_by(user_public_id=current_user.public_id).all()
+        return images, 200
 
-# Upload a new image
-@image_bp.route('/records/<int:record_id>/images', methods=['POST'])
-def upload_image(record_id):
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file part in the request'}), 400
-    
-    file = request.files['file']
-    
-    if file.filename == '':
-        return jsonify({'error': 'No file selected for uploading'}), 400
+    @api.doc('upload_image')
+    @api.expect(api.parser()
+                .add_argument('file', type='file', location='files', required=True)
+                .add_argument('record_id', type=int, required=True, help='The associated record identifier'))
+    @api.marshal_with(image_model, code=201)
+    @jwt_required()
+    def post(self):
+        current_user = self._get_current_user()
+        file = request.files['file']
+        upload_result = upload_file(file)
+        new_image = Image(
+            url=upload_result['url'],
+            record_id=request.form['record_id'],
+            user_public_id=current_user.public_id
+        )
+        db.session.add(new_image)
+        db.session.commit()
+        return new_image, 201
 
-    upload_result = upload_file(file)
-    image = Image(url=upload_result['url'], record_id=record_id)
-    db.session.add(image)
-    db.session.commit()
-    return jsonify({'message': 'Image uploaded successfully', 'url': upload_result['url']}), 201
+    def _get_current_user(self):
+        current_user_public_id = get_jwt_identity()
+        return User.query.filter_by(public_id=current_user_public_id).first_or_404()
 
-# Delete an image by ID
-@image_bp.route('/images/<int:image_id>', methods=['DELETE'])
-def delete_image(image_id):
-    image = Image.query.get(image_id)
-    if not image:
-        return jsonify({'error': 'Image not found'}), 404
+@api.route('/<int:id>')
+@api.param('id', 'The image identifier')
+class ImageItem(Resource):
+    @api.doc('delete_image')
+    @api.response(200, 'Image deleted successfully')
+    @api.response(403, 'Unauthorized')
+    @api.response(404, 'Image not found')
+    @jwt_required()
+    def delete(self, id):
+        current_user = ImageList._get_current_user(self)
+        image = Image.query.get_or_404(id)
+        if image.user_public_id != current_user.public_id:
+            api.abort(403, 'Unauthorized')
+        db.session.delete(image)
+        db.session.commit()
+        return {'message': 'Image deleted successfully'}, 200
 
-    db.session.delete(image)
-    db.session.commit()
-    return jsonify({'message': 'Image deleted successfully'}), 200
-
+@api.errorhandler(Exception)
+def handle_exception(error):
+    return {'message': str(error)}, getattr(error, 'code', 500)
