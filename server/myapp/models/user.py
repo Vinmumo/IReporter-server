@@ -16,7 +16,7 @@ class User(db.Model):
     is_admin = db.Column(db.Boolean, default=False)  # Change to Boolean
     worker_id = db.Column(db.Integer)
     created_at = db.Column(db.DateTime, default=datetime.now)
-    records = db.relationship('Record', backref='user', lazy=True)
+    records = db.relationship('Record', backref='user', lazy=True,cascade='all, delete-orphan')
     
     def __init__(self, **kwargs):
         super(User, self).__init__(**kwargs) #Initialize parent class
