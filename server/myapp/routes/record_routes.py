@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify
 from ..models.record import Record, db
 from ..models.image import Image
 from ..models.video import Video
-from ..services.cloudinary_service import upload_file
+from ..services.cloudinary_services import upload_file
 # import cloudinary.uploader
 
 record_bp = Blueprint('record', __name__)
@@ -40,6 +40,27 @@ def add_record():
     db.session.commit()
 
     return jsonify({"message": "Record added successfully"}), 201
+
+@record_bp.route('/records', methods=['GET'])
+def get_all_records():
+    records = Record.query.all()
+    records_list = []
+    for record in records:
+        record_data = {
+            "id": record.id,
+            "title": record.title,
+            "description": record.description,
+            "location": record.location,
+            "user_id": record.user_id,
+            "status": record.status,
+            "created_at": record.created_at,
+            "images": [{"id": img.id, "url": img.url} for img in record.images],
+            "videos": [{"id": vid.id, "url": vid.url} for vid in record.videos]
+        }
+        records_list.append(record_data)
+    
+    return jsonify(records_list), 200
+
 
 @record_bp.route('/records/<int:id>', methods=['GET'])
 def get_record(id):
