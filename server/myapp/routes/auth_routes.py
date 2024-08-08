@@ -1,75 +1,132 @@
-from flask import Blueprint, request, jsonify
+from flask import request
+from flask_restx import Namespace, Resource, fields, marshal
+from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
 from ..models.user import User, db
 
+api = Namespace('auth', description='Authentication operations')
 
-auth_bp = Blueprint('auth_bp', __name__)
-
-# Get all users
-@auth_bp.route('/users', methods=['GET'])
-def get_users():
-    users = User.query.all()
-    users_list = [user.serialize() for user in users]
-    return jsonify(users_list)
-
-# Get user by ID
-@auth_bp.route('/users/<int:id>', methods=['GET'])
-def get_user(id):
-    user = User.query.get_or_404(id)
-    return jsonify(user.serialize())
+ADMIN_EMAIL_DOMAIN = 'organization.com'
+VALID_WORKER_IDS = ['worker_id_1', 'worker_id_2', 'worker_id_3'] # worker IDs
+VALID_WORKER_EMAILS = ['worker1@organization.com', 'worker2@organization.com', 'worker3@organization.com'] # worker emails
 
 
-@auth_bp.route('/register', methods=['POST'])
-def register():
-    data = request.get_json()
-    username = data.get('username')
-    email = data.get('email')
-    password = data.get('password')
-    is_admin = data.get('is_admin', False)  # Default to False if not provided
-    worker_id = data.get('worker_id')
-    if User.query.filter_by(email=email).first() is not None:
-        return jsonify({'error': 'User already exists'}), 400
-    user = User(username=username, email=email, is_admin=is_admin, worker_id=worker_id)
-    user.set_password(password)
-    db.session.add(user)
-    db.session.commit()
-    return jsonify({'message': 'User registered successfully'}), 201
+user_model = api.model('User', {
+    'is_admin': fields.Boolean(readonly=True, description='Admin status'),
+    'worker_id': fields.String(description='Worker ID for admin users'),
+    'created_at': fields.DateTime(readonly=True, description='The user creation timestamp')
+})
 
-@auth_bp.route('/delete_user/<int:user_id>', methods=['DELETE'])
-def delete_user(user_id):
-    user = User.query.get(user_id)
-    if user is None:
-        return jsonify({'error': 'User not found'}), 404
-    db.session.delete(user)
-    db.session.commit()
-    return jsonify({'message': 'User deleted successfully'}), 200
+login_model = api.model('Login', {
+    'email': fields.String(required=True, description='The user email address'),
+    'password': fields.String(required=True, description='The user password')
+})
 
-@auth_bp.route('/users', methods=['DELETE'])
-def delete_users():
-    users = User.query.all()
-    for user in users:
-        db.session.delete(user)
-    db.session.commit()
-    return jsonify({"message": "All users deleted successfully"}), 200
+user_register_model = api.model('UserRegister', {
+    'email': fields.String(required=True, description='The user email address'),
+    'password': fields.String(required=True, description='The user password'),
+    'worker_id': fields.String(description='Worker ID for admin users')
+})
 
-@auth_bp.route('/login', methods=['POST'])
-def login():
-    data = request.get_json()
-    email = data.get('email')
-    password = data.get('password')
-    user = User.query.filter_by(email=email).first()
-    if user is None or not user.check_password(password):
-        return jsonify({'error': 'Invalid credentials'}), 401
-    # Generate token or session here
-    return jsonify({'message': 'Login successful'}), 200
+@api.route('/register')
+class UserRegister(Resource):
+    @api.expect(user_register_model)
+    @api.marshal_with(user_model, code=201)
+    @api.doc(responses={201: 'User registered successfully', 400: 'Validation error'})
+    def post(self):
+        data = request.get_json()
+        email = data['email']
+        is_admin = email.endswith(ADMIN_EMAIL_DOMAIN)
+        worker_id = data.get('worker_id')
 
-@auth_bp.route('/users/<int:id>', methods=['PUT'])
-def update_user(id):
-    user = User.query.get_or_404(id)
-    data = request.json
-    user.username = data.get('username', user.username)
-    user.email = data.get('email', user.email)
-    user.password_hash = data.get('password_hash', user.password_hash)
-    user.is_admin = data.get('is_admin', user.is_admin)
-    user.worker_id = data.get('worker_id', user.worker_id)
-    db.session.commit()
-    return jsonify(user.serialize())
+        if is_admin:
+            if worker_id not in VALID_WORKER_IDS or email not in VALID_WORKER_EMAILS:
+                return {'message': 'Invalid worker ID or email'}, 400
+        else:
+            worker_id = None
+
+        if User.query.filter_by(email=email).first():
+            return {'message': 'User already exists'}, 400
+
+        new_user = User(
+            email=email,
+            is_admin=is_admin,
+            worker_id=worker_id
+        )
+        new_user.set_password(data['password'])
+        db.session.add(new_user)
+        db.session.commit()
+        return {'message': 'User registered successfully'}, 201
+
+@api.route('/login')
+class UserLogin(Resource):
+    @api.expect(login_model)
+    @api.doc(responses={200: 'Login successful', 401: 'Invalid credentials'})
+    def post(self):
+        data = request.get_json()
+        user = User.query.filter_by(email=data['email']).first()
+        if user and user.check_password(data['password']):
+            access_token = create_access_token(identity=user.public_id)
+            refresh_token = create_refresh_token(identity=user.public_id)
+            return {
+                'message': 'Logged in successfully',
+                'access_token': access_token,
+                'refresh_token': refresh_token,
+                'user': marshal(user, user_model)
+            }, 200
+        return {'message': 'Invalid email or password'}, 401
+
+@api.route('/refresh')
+class UserRefresh(Resource):
+    @jwt_required(refresh=True)
+    def post(self):
+        current_user = get_jwt_identity()
+        new_access_token = create_access_token(identity=current_user)
+        return {'access_token': new_access_token}, 200
+
+@api.route('/user')
+class UserProfile(Resource):
+    @jwt_required()
+    @api.marshal_with(user_model)
+    def get(self):
+        current_user_public_id = get_jwt_identity()
+        user = User.query.filter_by(public_id=current_user_public_id).first()
+        if not user:
+            return {'error': 'User not found'}, 404
+        return user.to_dict(), 200
+
+@api.route('/users/<int:id>')
+@api.param('id', 'The user identifier')
+class UserUpdate(Resource):
+    @jwt_required()
+    @api.expect(user_model)
+    @api.marshal_with(user_model)
+    def put(self, id):
+        current_user_public_id = get_jwt_identity()
+        user = User.query.filter_by(public_id=current_user_public_id).first()
+        if not user or user.id != id:
+            return {'error': 'Unauthorized'}, 403
+        data = request.json
+        user.email = data.get('email', user.email)
+        if 'password' in data:
+            user.set_password(data['password'])
+        db.session.commit()
+        return user
+
+    @jwt_required()
+    def delete(self, id):
+        current_user_public_id = get_jwt_identity()
+        user = User.query.filter_by(public_id=current_user_public_id).first()
+        if not user or (not user.is_admin and user.id != id):
+            return {'error': 'Unauthorized'}, 403
+        user_to_delete = User.query.get(id)
+        if not user_to_delete:
+            return {'error': 'User not found'}, 404
+        db.session.delete(user_to_delete)
+        db.session.commit()
+        return {'message': 'User deleted successfully'}, 200
+
+@api.route('/logout')
+class UserLogout(Resource):
+    @jwt_required()
+    def post(self):
+        return {'message': 'Successfully logged out'}, 200
