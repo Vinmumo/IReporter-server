@@ -17,6 +17,7 @@ flake8 = "*"
 psycopg2-binary = "*"
 flask-restx = "*"
 flask-jwt-extended = "*"
+cloudinary = "*"
 
 [dev-packages]
 
