@@ -1,0 +1,49 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Migrations folder (only exclude compiled files)
+migrations/versions/*.pyc
+migrations/env.pyc
+migrations/script.py.mako.pyc
+
+# Environment Variables
+.env
+
+# Instance folder
+instance/
+
+# Logs and databases
+*.log
+*.sqlite3
+*.db
+
+# Secret config files (if any, like local_config.py)
+config.py
+
+# Ignore the venv (Virtual Environment) folder
+venv/
+ENV/
+.env/
+
+# Jupyter Notebook files
+.ipynb_checkpoints/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Coverage reports
+htmlcov/
+.coverage
+*.cover
+
+# Test output
+*.pytest_cache/
+
+# VS Code directory and files
+.vscode/
