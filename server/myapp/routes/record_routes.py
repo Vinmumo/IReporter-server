@@ -1,67 +1,101 @@
 from flask import request
-from flask_restx import Namespace, Resource, fields, marshal
+from flask_restx import Namespace, Resource, fields
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models.record import Record, db
-from ..models.video import Video
 from ..models.user import User
-from myapp.services.cloudinary_services import upload_file
 
-api = Namespace('videos', description='Video operations')
+api = Namespace('records', description='Record operations')
 
-video_model = api.model('Video', {
-    'id': fields.Integer(readonly=True, description='The video identifier'),
-    'url': fields.String(required=True, description='The video URL'),
-    'record_id': fields.Integer(required=True, description='The associated record identifier')
+record_model = api.model('Record', {
+    'public_id': fields.String(readonly=True, description='The record identifier'),
+    'title': fields.String(required=True, description='The title of the record'),
+    'description': fields.String(required=True, description='The description of the record'),
+    'location': fields.String(required=True, description='The location related to the record'),
+    'status': fields.String(description='The current status of the record'),
+    'record_type': fields.String(required=True, description='The type of record (red-flag or intervention)'),
+    'created_at': fields.DateTime(description='Record creation date'),
+    'images': fields.List(fields.String, description='List of image URLs'),
+    'videos': fields.List(fields.String, description='List of video URLs')
 })
 
 @api.route('')
-class VideoList(Resource):
-    @api.doc('create_video')
-    @api.expect(api.parser()
-                .add_argument('video', type='file', location='files', required=True)
-                .add_argument('record_id', type=int, required=True, help='The associated record identifier'))
-    @api.marshal_with(video_model, code=201)
+class RecordList(Resource):
+    @api.doc('list_records')
+    @api.marshal_with(record_model)
+    @jwt_required()
+    def get(self):
+        """Fetch all records for the authenticated user"""
+        current_user = self._get_current_user()
+        records = Record.query.filter_by(user_public_id=current_user.public_id).all()
+        return records
+
+    @api.doc('create_record')
+    @api.expect(record_model, validate=True)
+    @api.marshal_with(record_model, code=201)
     @jwt_required()
     def post(self):
+        """Create a new record"""
         current_user = self._get_current_user()
-        record_id = request.form['record_id']
-        record = Record.query.get_or_404(record_id)
-        if record.user_public_id != current_user.public_id:
-            api.abort(403, 'Unauthorized')
-        video_file = request.files['video']
-        upload_result = upload_file(video_file, resource_type='video')
-        new_video = Video(url=upload_result['secure_url'], record_id=record_id, user_public_id=current_user.public_id)
-        db.session.add(new_video)
+        data = request.json
+        new_record = Record(
+            title=data['title'],
+            description=data['description'],
+            location=data['location'],
+            record_type=data['record_type'],
+            user_public_id=current_user.public_id
+        )
+        db.session.add(new_record)
         db.session.commit()
-        return new_video, 201
+        return new_record, 201
 
     def _get_current_user(self):
         current_user_public_id = get_jwt_identity()
         return User.query.filter_by(public_id=current_user_public_id).first_or_404()
 
-@api.route('/<int:id>')
-@api.param('id', 'The video identifier')
-class VideoItem(Resource):
-    @api.doc('get_video')
-    @api.marshal_with(video_model)
-    @jwt_required()
-    def get(self, id):
-        video = Video.query.get_or_404(id)
-        return video
 
-    @api.doc('delete_video')
-    @api.response(200, 'Video deleted successfully')
-    @api.response(403, 'Unauthorized')
-    @api.response(404, 'Video not found')
+@api.route('/<string:public_id>')
+@api.param('public_id', 'The record identifier')
+class RecordItem(Resource):
+    @api.doc('get_record')
+    @api.marshal_with(record_model)
     @jwt_required()
-    def delete(self, id):
-        current_user = VideoList._get_current_user(self)
-        video = Video.query.get_or_404(id)
-        if video.user_public_id != current_user.public_id:
+    def get(self, public_id):
+        """Fetch a single record by its public_id"""
+        record = Record.query.filter_by(public_id=public_id).first_or_404()
+        return record
+
+    @api.doc('update_record')
+    @api.expect(record_model, validate=True)
+    @api.marshal_with(record_model)
+    @jwt_required()
+    def put(self, public_id):
+        """Update an existing record"""
+        current_user = RecordList._get_current_user(self)
+        record = Record.query.filter_by(public_id=public_id).first_or_404()
+        if record.user_public_id != current_user.public_id:
             api.abort(403, 'Unauthorized')
-        db.session.delete(video)
+        data = request.json
+        record.title = data.get('title', record.title)
+        record.description = data.get('description', record.description)
+        record.location = data.get('location', record.location)
+        record.status = data.get('status', record.status)
+        record.record_type = data.get('record_type', record.record_type)
         db.session.commit()
-        return {'message': 'Video deleted'}, 200
+        return record
+
+    @api.doc('delete_record')
+    @api.response(204, 'Record deleted successfully')
+    @api.response(403, 'Unauthorized')
+    @jwt_required()
+    def delete(self, public_id):
+        """Delete a record by its public_id"""
+        current_user = RecordList._get_current_user(self)
+        record = Record.query.filter_by(public_id=public_id).first_or_404()
+        if record.user_public_id != current_user.public_id:
+            api.abort(403, 'Unauthorized')
+        db.session.delete(record)
+        db.session.commit()
+        return '', 204
 
 @api.errorhandler(Exception)
 def handle_exception(error):
