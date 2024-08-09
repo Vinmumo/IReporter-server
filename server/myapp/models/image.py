@@ -1,3 +1,4 @@
+
 from myapp.extensions import db
 from sqlite3 import IntegrityError
 
@@ -33,3 +34,10 @@ class Image(db.Model):
         except IntegrityError:
             db.session.rollback()
             raise ValueError("Image could not be added.")
+        
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'url': self.url,
+            'record_id': self.record_id
+        }
