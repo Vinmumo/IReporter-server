@@ -31,7 +31,7 @@ class RecordList(Resource):
 
     @api.doc('create_record')
     @api.expect(record_model, validate=True)
-    @api.marshal_with(record_model, code=201)
+    @api.marshal_with(record_model)
     @jwt_required()
     def post(self):
         """Create a new record"""
