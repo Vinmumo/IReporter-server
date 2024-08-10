@@ -31,5 +31,6 @@ class User(db.Model):
             'email': self.email,
             'is_admin': self.is_admin,
             'worker_id': self.worker_id,
-            'created_at': self.created_at.isoformat()
-        }
+            'created_at': self.created_at.isoformat(),
+            'records': [record.to_dict() for record in self.records]  # if you want to include related records
+    }
