@@ -33,7 +33,7 @@ user_register_model = api.model('UserRegister', {
 @api.route('/register')
 class UserRegister(Resource):
     @api.expect(user_register_model)
-    @api.marshal_with(user_model)
+    @api.marshal_with(user_model, code=201)
     @api.doc(responses={201: 'User registered successfully', 400: 'Validation error'})
     def post(self):
         data = request.get_json()
@@ -58,8 +58,10 @@ class UserRegister(Resource):
         new_user.set_password(data['password'])
         db.session.add(new_user)
         db.session.commit()
-        return {'message': 'User registered successfully'}, 201
 
+# Return the new user object to be marshaled
+        return new_user, 201
+    
 @api.route('/login')
 class UserLogin(Resource):
     @api.expect(login_model)
