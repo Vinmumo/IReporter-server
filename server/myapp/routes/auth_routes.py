@@ -95,15 +95,16 @@ class UserProfile(Resource):
     @api.marshal_with(user_model)
     def get(self):
         try:
-            current_user_public_id = get_jwt_identity()
-            user = User.query.filter_by(public_id=current_user_public_id).first()
+            current_user_email = get_jwt_identity()
+            user = User.query.filter_by(email=current_user_email).first()
             if not user:
                 return {'error': 'User not found'}, 404
             return user.to_dict(), 200
         except Exception as e:
-            print(f"Exception occurred: {e}")  # Log the exception for debugging
+            # Log the exception for debugging
+            print(f"Exception occurred: {e}")
             return {'error': 'Internal Server Error'}, 500
-
+        
 @api.route('/users/<int:id>')
 @api.param('id', 'The user identifier')
 class UserUpdate(Resource):
