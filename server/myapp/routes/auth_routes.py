@@ -13,13 +13,11 @@ VALID_WORKER_EMAILS = ['worker1@organization.com', 'worker2@organization.com', '
 # Models for API documentation and data validation
 user_model = api.model('User', {
     'id': fields.Integer(readonly=True, description='The user ID'),
-    'public_id': fields.String(description='The public ID of the user'),
     'email': fields.String(description='The user email address'),
     'is_admin': fields.Boolean(readonly=True, description='Admin status'),
     'worker_id': fields.String(description='Worker ID for admin users'),
     'created_at': fields.DateTime(readonly=True, description='The user creation timestamp'),
 })
-
 
 login_model = api.model('Login', {
     'email': fields.String(required=True, description='The user email address'),
@@ -35,7 +33,7 @@ user_register_model = api.model('UserRegister', {
 @api.route('/register')
 class UserRegister(Resource):
     @api.expect(user_register_model)
-    @api.marshal_with(user_model)
+    @api.marshal_with(user_model, code=201)
     @api.doc(responses={201: 'User registered successfully', 400: 'Validation error'})
     def post(self):
         data = request.get_json()
@@ -60,8 +58,10 @@ class UserRegister(Resource):
         new_user.set_password(data['password'])
         db.session.add(new_user)
         db.session.commit()
-        return {'message': 'User registered successfully'}, 201
 
+# Return the new user object to be marshaled
+        return new_user, 201
+    
 @api.route('/login')
 class UserLogin(Resource):
     @api.expect(login_model)
@@ -70,8 +70,8 @@ class UserLogin(Resource):
         data = request.get_json()
         user = User.query.filter_by(email=data['email']).first()
         if user and user.check_password(data['password']):
-            access_token = create_access_token(identity=user.public_id)
-            refresh_token = create_refresh_token(identity=user.public_id)
+            access_token = create_access_token(identity=user.email)  # Use email as identity
+            refresh_token = create_refresh_token(identity=user.email)  # Use email as identity
             user_data = user.to_dict()  # Now includes 'id' as well
             return {
                 'message': 'Logged in successfully',
@@ -85,8 +85,8 @@ class UserLogin(Resource):
 class UserRefresh(Resource):
     @jwt_required(refresh=True)
     def post(self):
-        current_user = get_jwt_identity()
-        new_access_token = create_access_token(identity=current_user)
+        current_user_email = get_jwt_identity()
+        new_access_token = create_access_token(identity=current_user_email)  # Use email as identity
         return {'access_token': new_access_token}, 200
 
 @api.route('/user')
@@ -101,10 +101,9 @@ class UserProfile(Resource):
                 return {'error': 'User not found'}, 404
             return user.to_dict(), 200
         except Exception as e:
-            # Log the exception for debugging
             print(f"Exception occurred: {e}")
             return {'error': 'Internal Server Error'}, 500
-        
+
 @api.route('/users/<int:id>')
 @api.param('id', 'The user identifier')
 class UserUpdate(Resource):
@@ -112,8 +111,8 @@ class UserUpdate(Resource):
     @api.expect(user_model)
     @api.marshal_with(user_model)
     def put(self, id):
-        current_user_public_id = get_jwt_identity()
-        user = User.query.filter_by(public_id=current_user_public_id).first()
+        current_user_email = get_jwt_identity()
+        user = User.query.filter_by(email=current_user_email).first()
         if not user or user.id != id:
             return {'error': 'Unauthorized'}, 403
         data = request.json
@@ -125,8 +124,8 @@ class UserUpdate(Resource):
 
     @jwt_required()
     def delete(self, id):
-        current_user_public_id = get_jwt_identity()
-        user = User.query.filter_by(public_id=current_user_public_id).first()
+        current_user_email = get_jwt_identity()
+        user = User.query.filter_by(email=current_user_email).first()
         if not user or (not user.is_admin and user.id != id):
             return {'error': 'Unauthorized'}, 403
         user_to_delete = User.query.get(id)
