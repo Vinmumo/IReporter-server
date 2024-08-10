@@ -67,11 +67,13 @@ class UserLogin(Resource):
         if user and user.check_password(data['password']):
             access_token = create_access_token(identity=user.public_id)
             refresh_token = create_refresh_token(identity=user.public_id)
+            user_data = marshal(user, user_model)
+            user_data['public_id'] = user.public_id  # Ensure public_id is in the response
             return {
                 'message': 'Logged in successfully',
                 'access_token': access_token,
                 'refresh_token': refresh_token,
-                'user': marshal(user, user_model)
+                'user': user_data
             }, 200
         return {'message': 'Invalid email or password'}, 401
 
