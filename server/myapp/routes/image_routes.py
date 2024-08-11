@@ -15,7 +15,7 @@ image_model = api.model('Image', {
 
 api.models[image_model.name] = image_model
 
-@api.route('')
+@api.route('/')
 class ImageList(Resource):
     @api.doc('get_images')
     @api.marshal_list_with(image_model)
