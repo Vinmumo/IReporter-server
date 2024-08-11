@@ -70,8 +70,8 @@ class UserLogin(Resource):
         data = request.get_json()
         user = User.query.filter_by(email=data['email']).first()
         if user and user.check_password(data['password']):
-            access_token = create_access_token(identity=user.email)  # Use email as identity
-            refresh_token = create_refresh_token(identity=user.email)  # Use email as identity
+            access_token = create_access_token(identity=user.public_id)  
+            refresh_token = create_refresh_token(identity=user.public_id)  
             user_data = user.to_dict()  # Now includes 'id' as well
             return {
                 'message': 'Logged in successfully',
@@ -85,8 +85,8 @@ class UserLogin(Resource):
 class UserRefresh(Resource):
     @jwt_required(refresh=True)
     def post(self):
-        current_user_email = get_jwt_identity()
-        new_access_token = create_access_token(identity=current_user_email)  # Use email as identity
+        current_user_public_id = get_jwt_identity()
+        new_access_token = create_access_token(identity=current_user_public_id)  # Use email as identity
         return {'access_token': new_access_token}, 200
 
 @api.route('/user')
@@ -95,8 +95,8 @@ class UserProfile(Resource):
     @api.marshal_with(user_model)
     def get(self):
         try:
-            current_user_email = get_jwt_identity()
-            user = User.query.filter_by(email=current_user_email).first()
+            current_user_public_id = get_jwt_identity()
+            user = User.query.filter_by(email=current_user_public_id).first()
             if not user:
                 return {'error': 'User not found'}, 404
             return user.to_dict(), 200
@@ -111,8 +111,8 @@ class UserUpdate(Resource):
     @api.expect(user_model)
     @api.marshal_with(user_model)
     def put(self, id):
-        current_user_email = get_jwt_identity()
-        user = User.query.filter_by(email=current_user_email).first()
+        current_user_public_id = get_jwt_identity()
+        user = User.query.filter_by(email=current_user_public_id).first()
         if not user or user.id != id:
             return {'error': 'Unauthorized'}, 403
         data = request.json
@@ -124,8 +124,8 @@ class UserUpdate(Resource):
 
     @jwt_required()
     def delete(self, id):
-        current_user_email = get_jwt_identity()
-        user = User.query.filter_by(email=current_user_email).first()
+        current_user_public_id = get_jwt_identity()
+        user = User.query.filter_by(email=current_user_public_id).first()
         if not user or (not user.is_admin and user.id != id):
             return {'error': 'Unauthorized'}, 403
         user_to_delete = User.query.get(id)
