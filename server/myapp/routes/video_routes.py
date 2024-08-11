@@ -14,7 +14,7 @@ video_model = api.model('Video', {
     'record_id': fields.Integer(required=True, description='The associated record identifier')
 })
 
-@api.route('')
+@api.route('/')
 class VideoList(Resource):
     @api.doc('create_video')
     @api.expect(video_model)

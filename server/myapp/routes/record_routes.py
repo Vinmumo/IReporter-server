@@ -18,7 +18,7 @@ record_model = api.model('Record', {
     'videos': fields.List(fields.String, description='List of video URLs')
 })
 
-@api.route('')
+@api.route('/')
 class RecordList(Resource):
     @api.doc('list_records')
     @api.marshal_with(record_model)
