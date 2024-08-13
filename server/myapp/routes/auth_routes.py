@@ -2,6 +2,8 @@ from flask import request
 from flask_restx import Namespace, Resource, fields
 from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
 from ..models.user import User, db
+from sqlalchemy.exc import SQLAlchemyError
+
 
 api = Namespace('auth', description='Authentication operations')
 
@@ -30,37 +32,50 @@ user_register_model = api.model('UserRegister', {
     'worker_id': fields.String(description='Worker ID for admin users')
 })
 
+
 @api.route('/register')
 class UserRegister(Resource):
     @api.expect(user_register_model)
     @api.marshal_with(user_model, code=201)
     @api.doc(responses={201: 'User registered successfully', 400: 'Validation error'})
     def post(self):
-        data = request.get_json()
-        email = data['email']
-        is_admin = email.endswith(ADMIN_EMAIL_DOMAIN)
-        worker_id = data.get('worker_id')
+        try:
+            data = request.get_json()
+            print("Received data:", data)  # Log the incoming data
+            email = data['email']
+            is_admin = email.endswith(ADMIN_EMAIL_DOMAIN)
+            worker_id = data.get('worker_id')
 
-        if is_admin:
-            if worker_id not in VALID_WORKER_IDS or email not in VALID_WORKER_EMAILS:
-                return {'message': 'Invalid worker ID or email'}, 400
-        else:
-            worker_id = None
+            if is_admin:
+                if worker_id not in VALID_WORKER_IDS or email not in VALID_WORKER_EMAILS:
+                    print("Invalid worker ID or email")  # Log the specific issue
+                    return {'message': 'Invalid worker ID or email'}, 400
+            else:
+                worker_id = None
 
-        if User.query.filter_by(email=email).first():
-            return {'message': 'User already exists'}, 400
+            if User.query.filter_by(email=email).first():
+                print("User already exists")  # Log if user already exists
+                return {'message': 'User already exists'}, 400
 
-        new_user = User(
-            email=email,
-            is_admin=is_admin,
-            worker_id=worker_id
-        )
-        new_user.set_password(data['password'])
-        db.session.add(new_user)
-        db.session.commit()
+            new_user = User(
+                email=email,
+                is_admin=is_admin,
+                worker_id=worker_id
+            )
+            new_user.set_password(data['password'])
+            db.session.add(new_user)
+            db.session.commit()
 
-# Return the new user object to be marshaled
-        return new_user, 201
+            return new_user, 201
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            print(f"SQLAlchemy error occurred: {e}")
+            return {'message': 'Database error occurred'}, 500
+        except Exception as e:
+            print(f"Unhandled exception occurred: {e}")
+            return {'message': 'Internal Server Error'}, 500
+
+
     
 @api.route('/login')
 class UserLogin(Resource):
