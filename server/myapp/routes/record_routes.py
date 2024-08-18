@@ -1,4 +1,4 @@
-from flask import request
+from flask import request, jsonify
 from flask_restx import Namespace, Resource, fields
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models.record import Record, db
@@ -18,7 +18,6 @@ record_model = api.model('Record', {
     'videos': fields.List(fields.String, description='List of video URLs')
 })
 
-@api.route('/')
 class RecordList(Resource):
     @api.doc('list_records')
     @api.marshal_with(record_model)
@@ -52,9 +51,6 @@ class RecordList(Resource):
         current_user_public_id = get_jwt_identity()
         return User.query.filter_by(public_id=current_user_public_id).first_or_404()
 
-
-@api.route('/<string:public_id>')
-@api.param('public_id', 'The record identifier')
 class RecordItem(Resource):
     @api.doc('get_record')
     @api.marshal_with(record_model)
@@ -97,6 +93,51 @@ class RecordItem(Resource):
         db.session.commit()
         return '', 204
 
-@api.errorhandler(Exception)
-def handle_exception(error):
-    return {'message': str(error)}, getattr(error, 'code', 500)
+class RedFlagList(Resource):
+    @api.doc('list_red_flags')
+    @api.marshal_with(record_model)
+    @jwt_required()
+    def get(self):
+        """Fetch all red-flag records for the authenticated user or admin"""
+        current_user_public_id = get_jwt_identity()
+        current_user = User.query.filter_by(public_id=current_user_public_id).first_or_404()
+
+        if current_user.is_admin:
+            # Admin can view all red-flag records
+            red_flags = Record.query.filter_by(record_type='red-flag').all()
+        else:
+            # Regular users can only view their own red-flag records
+            red_flags = Record.query.filter_by(user_public_id=current_user_public_id, record_type='red-flag').all()
+
+        if not red_flags:
+            return jsonify({'message': 'No red flags found'}), 404
+
+        return red_flags
+
+class InterventionList(Resource):
+    @api.doc('list_interventions')
+    @api.marshal_with(record_model)
+    @jwt_required()
+    def get(self):
+        """Fetch all intervention records for the authenticated user or admin"""
+        current_user_public_id = get_jwt_identity()
+        current_user = User.query.filter_by(public_id=current_user_public_id).first_or_404()
+
+        if current_user.is_admin:
+            
+            interventions = Record.query.filter_by(record_type='intervention').all()
+        else:
+            
+            interventions = Record.query.filter_by(user_public_id=current_user_public_id, record_type='intervention').all()
+
+        if not interventions:
+            return jsonify({'message': 'No interventions found'}), 404
+
+        return interventions
+
+
+# Register resources with the namespace
+api.add_resource(RecordList, '/')
+api.add_resource(RecordItem, '/<string:public_id>')
+api.add_resource(RedFlagList, '/red-flags')
+api.add_resource(InterventionList, '/interventions')
