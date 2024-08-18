@@ -4,13 +4,12 @@ from flask_jwt_extended import create_access_token, create_refresh_token, jwt_re
 from ..models.user import User, db
 from sqlalchemy.exc import SQLAlchemyError
 
-
 api = Namespace('auth', description='Authentication operations')
 
 # Constants for admin user validation
-ADMIN_EMAIL_DOMAIN = 'organization.com'
-VALID_WORKER_IDS = ['worker_id_1', 'worker_id_2', 'worker_id_3']
-VALID_WORKER_EMAILS = ['worker1@organization.com', 'worker2@organization.com', 'worker3@organization.com']
+ADMIN_EMAIL_DOMAIN = 'ireporter.com'
+VALID_WORKER_IDS = ['IRA1', 'IRA2', 'IRA3', 'IRA4', 'IRA5']
+# VALID_WORKER_EMAILS = ['worker1@organization.com', 'worker2@organization.com', 'worker3@organization.com']
 
 # Models for API documentation and data validation
 user_model = api.model('User', {
@@ -41,22 +40,23 @@ class UserRegister(Resource):
     def post(self):
         try:
             data = request.get_json()
-            print("Received data:", data)  # Log the incoming data
             email = data['email']
-            is_admin = email.endswith(ADMIN_EMAIL_DOMAIN)
             worker_id = data.get('worker_id')
 
-            if is_admin:
-                if worker_id not in VALID_WORKER_IDS or email not in VALID_WORKER_EMAILS:
-                    print("Invalid worker ID or email")  # Log the specific issue
-                    return {'message': 'Invalid worker ID or email'}, 400
+            # Determine if the user should be an admin
+            is_admin = False
+            if email.endswith(ADMIN_EMAIL_DOMAIN):
+                is_admin = True
+                if worker_id not in VALID_WORKER_IDS:
+                    return {'message': 'Invalid worker ID'}, 400
             else:
                 worker_id = None
 
+            # Check if the user already exists
             if User.query.filter_by(email=email).first():
-                print("User already exists")  # Log if user already exists
                 return {'message': 'User already exists'}, 400
 
+            # Create new user
             new_user = User(
                 email=email,
                 is_admin=is_admin,
@@ -69,14 +69,11 @@ class UserRegister(Resource):
             return new_user, 201
         except SQLAlchemyError as e:
             db.session.rollback()
-            print(f"SQLAlchemy error occurred: {e}")
             return {'message': 'Database error occurred'}, 500
         except Exception as e:
-            print(f"Unhandled exception occurred: {e}")
             return {'message': 'Internal Server Error'}, 500
 
 
-    
 @api.route('/login')
 class UserLogin(Resource):
     @api.expect(login_model)
@@ -85,9 +82,9 @@ class UserLogin(Resource):
         data = request.get_json()
         user = User.query.filter_by(email=data['email']).first()
         if user and user.check_password(data['password']):
-            access_token = create_access_token(identity=user.public_id)  
-            refresh_token = create_refresh_token(identity=user.public_id)  
-            user_data = user.to_dict()  # Now includes 'id' as well
+            access_token = create_access_token(identity=user.public_id)
+            refresh_token = create_refresh_token(identity=user.public_id)
+            user_data = user.to_dict()
             return {
                 'message': 'Logged in successfully',
                 'access_token': access_token,
@@ -96,13 +93,15 @@ class UserLogin(Resource):
             }, 200
         return {'message': 'Invalid email or password'}, 401
 
+
 @api.route('/refresh')
 class UserRefresh(Resource):
     @jwt_required(refresh=True)
     def post(self):
         current_user_public_id = get_jwt_identity()
-        new_access_token = create_access_token(identity=current_user_public_id)  # Use email as identity
+        new_access_token = create_access_token(identity=current_user_public_id)
         return {'access_token': new_access_token}, 200
+
 
 @api.route('/user')
 class UserProfile(Resource):
@@ -111,13 +110,13 @@ class UserProfile(Resource):
     def get(self):
         try:
             current_user_public_id = get_jwt_identity()
-            user = User.query.filter_by(email=current_user_public_id).first()
+            user = User.query.filter_by(public_id=current_user_public_id).first()
             if not user:
                 return {'error': 'User not found'}, 404
             return user.to_dict(), 200
         except Exception as e:
-            print(f"Exception occurred: {e}")
             return {'error': 'Internal Server Error'}, 500
+
 
 @api.route('/users/<int:id>')
 @api.param('id', 'The user identifier')
@@ -127,7 +126,7 @@ class UserUpdate(Resource):
     @api.marshal_with(user_model)
     def put(self, id):
         current_user_public_id = get_jwt_identity()
-        user = User.query.filter_by(email=current_user_public_id).first()
+        user = User.query.filter_by(public_id=current_user_public_id).first()
         if not user or user.id != id:
             return {'error': 'Unauthorized'}, 403
         data = request.json
@@ -140,7 +139,7 @@ class UserUpdate(Resource):
     @jwt_required()
     def delete(self, id):
         current_user_public_id = get_jwt_identity()
-        user = User.query.filter_by(email=current_user_public_id).first()
+        user = User.query.filter_by(public_id=current_user_public_id).first()
         if not user or (not user.is_admin and user.id != id):
             return {'error': 'Unauthorized'}, 403
         user_to_delete = User.query.get(id)
@@ -149,6 +148,7 @@ class UserUpdate(Resource):
         db.session.delete(user_to_delete)
         db.session.commit()
         return {'message': 'User deleted successfully'}, 200
+
 
 @api.route('/logout')
 class UserLogout(Resource):
