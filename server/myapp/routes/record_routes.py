@@ -66,13 +66,34 @@ class RecordItem(Resource):
         """Update an existing record"""
         current_user = RecordList._get_current_user(self)
         record = Record.query.filter_by(public_id=public_id).first_or_404()
+
+        # Only the owner of the record can update description and location
         if record.user_public_id != current_user.public_id:
             api.abort(403, 'Unauthorized')
+
+        # Ensure the record status has not been updated by the admin
+        if record.status != 'pending':
+            api.abort(400, 'Record status cannot be updated by the user')
+
         data = request.json
         record.description = data.get('description', record.description)
         record.location = data.get('location', record.location)
+        db.session.commit()
+        return record
+
+    @api.doc('change_record_status')
+    @api.expect(record_model, validate=True)
+    @api.marshal_with(record_model)
+    @jwt_required()
+    def patch(self, public_id):
+        """Admin can update the status of a record"""
+        current_user = RecordList._get_current_user(self)
+        if not current_user.is_admin:
+            api.abort(403, 'Unauthorized')
+
+        record = Record.query.filter_by(public_id=public_id).first_or_404()
+        data = request.json
         record.status = data.get('status', record.status)
-        record.record_type = data.get('record_type', record.record_type)
         db.session.commit()
         return record
 

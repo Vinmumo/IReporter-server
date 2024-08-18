@@ -1,27 +1,29 @@
-
-
-from flask import Flask,jsonify
+from flask import Flask, jsonify
 from flask_restx import Api
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS
+from flask_mail import Mail
 from .extensions import db, migrate
 from config import Config
+
+mail = Mail()
 
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
 
     # Enable CORS
-    CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}}, supports_credentials=True)
-
+    CORS(app)
 
     db.init_app(app)
     migrate.init_app(app, db)
     
     jwt = JWTManager(app)
     jwt.init_app(app)
-    
-     # JWT error handlers
+
+    mail.init_app(app)  # Initialize Flask-Mail
+
+    # JWT error handlers
     @jwt.invalid_token_loader
     def invalid_token_callback(error):
         return jsonify({
@@ -58,26 +60,26 @@ def create_app():
         }), 401
     
     api = Api(app,
-    version='1.0',
-    title='iReporter API',
-    description='A comprehensive API for the iReporter platform, enabling citizens to report corruption and request government intervention.',
-    doc='/api/docs',
-    authorizations={
-        'apikey': {
-            'type': 'apiKey',
-            'in': 'header',
-            'name': 'Authorization'
-        }
-    },
-    security='apikey',
-    license='MIT',
-    license_url='https://opensource.org/licenses/MIT',
-    contact='API Support',
-    contact_url='http://www.ireporter.com/support',
-    contact_email='info@ireporter.com',
-    default='iReporter',
-    default_label='iReporter operations'
-)
+              version='1.0',
+              title='iReporter API',
+              description='A comprehensive API for the iReporter platform, enabling citizens to report corruption and request government intervention.',
+              doc='/api/docs',
+              authorizations={
+                  'apikey': {
+                      'type': 'apiKey',
+                      'in': 'header',
+                      'name': 'Authorization'
+                  }
+              },
+              security='apikey',
+              license='MIT',
+              license_url='https://opensource.org/licenses/MIT',
+              contact='API Support',
+              contact_url='http://www.ireporter.com/support',
+              contact_email='info@ireporter.com',
+              default='iReporter',
+              default_label='iReporter operations'
+    )
     
     from .routes.auth_routes import api as auth_ns
     from .routes.record_routes import api as record_ns
