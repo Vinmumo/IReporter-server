@@ -31,7 +31,6 @@ def seed():
 
     # Create sample records related to corruption
     record1 = Record(
-        title='Bribery Incident',
         description='Witnessed a bribery incident at the city hall.',
         location='City Hall',
         user_id=user1.id,
@@ -39,7 +38,6 @@ def seed():
         created_at=datetime.now()
     )
     record2 = Record(
-        title='Embezzlement Case',
         description='Suspected embezzlement of public funds in the local council.',
         location='Local Council Office',
         user_id=user2.id,
@@ -47,7 +45,6 @@ def seed():
         created_at=datetime.now()
     )
     record3 = Record(
-        title='Fraudulent Activity',
         description='Observed fraudulent activity during the procurement process.',
         location='Procurement Office',
         user_id=user1.id,
