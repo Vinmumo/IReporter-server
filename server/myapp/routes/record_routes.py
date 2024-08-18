@@ -8,7 +8,6 @@ api = Namespace('records', description='Record operations')
 
 record_model = api.model('Record', {
     'public_id': fields.String(readonly=True, description='The record identifier'),
-    'title': fields.String(required=True, description='The title of the record'),
     'description': fields.String(required=True, description='The description of the record'),
     'location': fields.String(required=True, description='The location related to the record'),
     'status': fields.String(description='The current status of the record'),
@@ -37,7 +36,6 @@ class RecordList(Resource):
         current_user = self._get_current_user()
         data = request.json
         new_record = Record(
-            title=data['title'],
             description=data['description'],
             location=data['location'],
             record_type=data['record_type'],
@@ -71,7 +69,6 @@ class RecordItem(Resource):
         if record.user_public_id != current_user.public_id:
             api.abort(403, 'Unauthorized')
         data = request.json
-        record.title = data.get('title', record.title)
         record.description = data.get('description', record.description)
         record.location = data.get('location', record.location)
         record.status = data.get('status', record.status)
@@ -136,7 +133,7 @@ class InterventionList(Resource):
         return interventions
 
 
-# Register resources with the namespace
+# Register resources 
 api.add_resource(RecordList, '/')
 api.add_resource(RecordItem, '/<string:public_id>')
 api.add_resource(RedFlagList, '/red-flags')

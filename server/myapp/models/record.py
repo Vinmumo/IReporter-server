@@ -6,7 +6,6 @@ class Record(db.Model):
     __tablename__ = 'records'
     id = db.Column(db.Integer, primary_key=True)
     public_id = db.Column(db.String(40), unique=True, nullable=False)
-    title = db.Column(db.String(120), nullable=False)
     description = db.Column(db.Text, nullable=False)
     location = db.Column(db.String(120), nullable=False)
     status = db.Column(db.String(120), default='Under Investigation')
@@ -25,7 +24,6 @@ class Record(db.Model):
     def to_dict(self):
         return {
             'public_id': self.public_id,
-            'title': self.title,
             'description': self.description,
             'location': self.location,
             'status': self.status,
