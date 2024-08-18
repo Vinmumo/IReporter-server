@@ -8,7 +8,7 @@ class Record(db.Model):
     public_id = db.Column(db.String(40), unique=True, nullable=False)
     description = db.Column(db.Text, nullable=False)
     location = db.Column(db.String(120), nullable=False)
-    status = db.Column(db.String(120), default='Under Investigation')
+    status = db.Column(db.String(120), default='pending')
     record_type = db.Column(db.String(20), nullable=False) # 'red-flag' or 'intervention'
     created_at = db.Column(db.DateTime, default=datetime.now)
     user_public_id = db.Column(db.String(40), db.ForeignKey('users.public_id'), nullable=False)

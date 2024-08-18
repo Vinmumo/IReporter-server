@@ -1,55 +1,51 @@
-from flask import Flask
-from flask_mail import Mail ,Message
+from flask_mail import Mail, Message
+from flask import current_app
+from itsdangerous import URLSafeTimedSerializer
 
 
-app = Flask(__name__)
+mail = Mail()
 
-app.config['DEBUG'] = True
-app.config['TESTING'] = False
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_PORT'] = 587
-app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USE_SSL'] = False
-app.config['MAIL_USERNAME'] = 'mwangiryan12@gmail.com'
-app.config['MAIL_PASSWORD'] = 'faov jubb tgvs yquq'
-app.config['MAIL_DEFAULT_SENDER'] = 'mwangiryan12@gmail.com'
-app.config['MAIL_MAX_EMAILS'] = None
-app.config['MAIL_ASCII_ATTACHMENTS'] = False
+def generate_token(email):
+    serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+    return serializer.dumps(email, salt='email-confirmation-salt')
 
-mail = Mail(app)
+def verify_token(token, expiration=3600):  # 1 hour expiration
+    serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+    try:
+        email = serializer.loads(token, salt='email-confirmation-salt', max_age=expiration)
+    except Exception:
+        return None
+    return email
 
-@app.route('/')
-def index():
-    msg = Message("Test Email", recipients = ["dicksonmurith155@gmail.com"])  # Replace with your own recipient email address.
-    msg.body = "Hello, this is a test email from the Flask-Mail application."
-    mail.send(msg)
-    return "Email sent successfully!"
-    
-    mail.send(msg)
-
+def send_verification_email(user_email):
+    token = generate_token(user_email)
+    verify_url = f"{current_app.config['FRONTEND_URL']}/verify/{token}"  
     msg = Message(
-        subject = '',
-        recipients = [],
-        body = '',
-        sender= '',
-        cc= '',
-        bcc= '',
-        attachments='',
-        html='',
-        charset='',
-        headers='',
-        reply_to= '',
-        date= '',
+        subject="Confirm Your Email",
+        recipients=[user_email],
+        body=f"Please confirm your email by clicking the following link: {verify_url}"
     )
-# when the user wants to send multiple emails at once
-@app.route('/bulk')
-def bulk():
-    users = [{'name': 'ryan', 'email': 'email@example.com'}]
-    with mail.connect()as conn:
-        for user in users:
-            msg = Message("Test Email", sender = "mwangiryan12@gmail.com", recipients = [user['email']])
-            msg.body = f"Hello, {user['name']}. This is a test email from the Flask-Mail application."
-            conn.send(msg)
+    mail.send(msg)
 
-if __name__ == "__main__":
-    app.run()
+def send_test_email(user_email):
+    try:
+        msg = Message(
+            subject="Test Email",
+            recipients=[user_email],
+            body="This is a test email to check if email sending works."
+        )
+        mail.send(msg)
+        current_app.logger.info(f"Test email sent to {user_email}")
+    except Exception as e:
+        current_app.logger.error(f"Failed to send test email to {user_email}: {e}")
+        raise e
+
+def send_password_reset_email(user_email):
+    token = generate_token(user_email)
+    reset_url = f"{current_app.config['FRONTEND_URL']}/reset-password/{token}"
+    msg = Message(
+        subject="Password Reset Request",
+        recipients=[user_email],
+        body=f"To reset your password, click the following link: {reset_url}. If you did not request a password reset, please ignore this email."
+    )
+    mail.send(msg)
