@@ -1,15 +1,17 @@
-from flask import request
+from flask import request, url_for, current_app, jsonify
 from flask_restx import Namespace, Resource, fields
 from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
-from ..models.user import User, db
+from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.exc import SQLAlchemyError
+from ..models.user import User, db
+from ..services.email_service import send_verification_email, send_password_reset_email, verify_token, send_test_email
+from http import HTTPStatus
 
 api = Namespace('auth', description='Authentication operations')
 
 # Constants for admin user validation
 ADMIN_EMAIL_DOMAIN = 'ireporter.com'
 VALID_WORKER_IDS = ['IRA1', 'IRA2', 'IRA3', 'IRA4', 'IRA5']
-# VALID_WORKER_EMAILS = ['worker1@organization.com', 'worker2@organization.com', 'worker3@organization.com']
 
 # Models for API documentation and data validation
 user_model = api.model('User', {
@@ -31,47 +33,105 @@ user_register_model = api.model('UserRegister', {
     'worker_id': fields.String(description='Worker ID for admin users')
 })
 
+# Helper function for password validation
+def validate_password(password):
+    if len(password) < 8:
+        return False
+    if not any(char.isdigit() for char in password):
+        return False
+    if not any(char.isupper() for char in password):
+        return False
+    if not any(char in "!@#$%^&*()_+-=[]{}|;':,.<>?/~`" for char in password):
+        return False
+    return True
+
 
 @api.route('/register')
-class UserRegister(Resource):
-    @api.expect(user_register_model)
-    @api.marshal_with(user_model, code=201)
-    @api.doc(responses={201: 'User registered successfully', 400: 'Validation error'})
+class Register(Resource):
     def post(self):
+        data = request.get_json()
+
+        if not data:
+            return {'message': 'No input data provided'}, int(HTTPStatus.BAD_REQUEST)
+
+        email = data.get('email')
+        password = data.get('password')
+
+        if not email or not password:
+            return {'message': 'Email and password are required'}, int(HTTPStatus.BAD_REQUEST)
+
+        # Check if user already exists
+        existing_user = User.query.filter_by(email=email).first()
+        if existing_user:
+            return {'message': 'User already exists'}, int(HTTPStatus.CONFLICT)
+
+        # Create new user and set the password
+        new_user = User(email=email)
+        new_user.set_password(password)
+
+        db.session.add(new_user)
+        db.session.commit()
+
+        # Send verification email
         try:
-            data = request.get_json()
-            email = data['email']
-            worker_id = data.get('worker_id')
-
-            # Determine if the user should be an admin
-            is_admin = False
-            if email.endswith(ADMIN_EMAIL_DOMAIN):
-                is_admin = True
-                if worker_id not in VALID_WORKER_IDS:
-                    return {'message': 'Invalid worker ID'}, 400
-            else:
-                worker_id = None
-
-            # Check if the user already exists
-            if User.query.filter_by(email=email).first():
-                return {'message': 'User already exists'}, 400
-
-            # Create new user
-            new_user = User(
-                email=email,
-                is_admin=is_admin,
-                worker_id=worker_id
-            )
-            new_user.set_password(data['password'])
-            db.session.add(new_user)
-            db.session.commit()
-
-            return new_user, 201
-        except SQLAlchemyError as e:
-            db.session.rollback()
-            return {'message': 'Database error occurred'}, 500
+            send_verification_email(email)
+            # send_test_email(email)
         except Exception as e:
-            return {'message': 'Internal Server Error'}, 500
+            db.session.delete(new_user)
+            db.session.commit()
+            current_app.logger.error(f"Failed to send verification email to {email}: {e}")
+            return {'message': 'Failed to send verification email, please try again later.'}, int(HTTPStatus.INTERNAL_SERVER_ERROR)
+
+        return {'message': 'User registered successfully. Please check your email to verify your account.'}, int(HTTPStatus.CREATED)
+
+
+@api.route('/verify/<token>')
+class EmailVerification(Resource):
+    def get(self, token):
+        email = verify_token(token)
+        if not email:
+            return {'message': 'Invalid or expired token'}, 400
+
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return {'message': 'User not found'}, 404
+        if user.is_verified:
+            return {'message': 'User already verified'}, 200
+
+        user.is_verified = True
+        db.session.commit()
+        return {'message': 'Email verified successfully'}, 200
+
+
+@api.route('/forgot-password')
+class ForgotPassword(Resource):
+    def post(self):
+        email = request.json.get('email')
+        user = User.query.filter_by(email=email).first()
+        if user:
+            send_password_reset_email(email)
+        return {'message': 'If the email is valid, a password reset link has been sent.'}, 200
+
+@api.route('/reset-password/<token>')
+class ResetPassword(Resource):
+    def post(self, token):
+        email = verify_token(token)
+        if not email:
+            return {'message': 'Invalid or expired token'}, 400
+
+        data = request.get_json()
+        new_password = data.get('password')
+        if not new_password:
+            return {'message': 'Password is required'}, 400
+
+        user = User.query.filter_by(email=email).first()
+        if user:
+            user.password = generate_password_hash(new_password)
+            db.session.commit()
+            return {'message': 'Password has been reset successfully'}, 200
+
+        return {'message': 'User not found'}, 404
+
 
 
 @api.route('/login')
@@ -102,7 +162,6 @@ class UserRefresh(Resource):
         new_access_token = create_access_token(identity=current_user_public_id)
         return {'access_token': new_access_token}, 200
 
-
 @api.route('/user')
 class UserProfile(Resource):
     @jwt_required()
@@ -114,9 +173,8 @@ class UserProfile(Resource):
             if not user:
                 return {'error': 'User not found'}, 404
             return user.to_dict(), 200
-        except Exception as e:
+        except Exception:
             return {'error': 'Internal Server Error'}, 500
-
 
 @api.route('/users/<int:id>')
 @api.param('id', 'The user identifier')
@@ -132,7 +190,7 @@ class UserUpdate(Resource):
         data = request.json
         user.email = data.get('email', user.email)
         if 'password' in data:
-            user.set_password(data['password'])
+            user.password = generate_password_hash(data['password'])
         db.session.commit()
         return user
 
@@ -149,9 +207,38 @@ class UserUpdate(Resource):
         db.session.commit()
         return {'message': 'User deleted successfully'}, 200
 
-
 @api.route('/logout')
 class UserLogout(Resource):
     @jwt_required()
     def post(self):
         return {'message': 'Successfully logged out'}, 200
+
+@api.route('/delete-user/<int:user_id>')
+@api.param('user_id', 'The user identifier')
+class DeleteUser(Resource):
+    @jwt_required()
+    def delete(self, user_id):
+        current_user_public_id = get_jwt_identity()
+        current_user = User.query.filter_by(public_id=current_user_public_id).first()
+
+        if not current_user:
+            return {'message': 'User not found'}, 404
+
+        user_to_delete = User.query.get(user_id)
+        
+        if not user_to_delete:
+            return {'message': 'User not found'}, 404
+
+        # Check if the current user is trying to delete their own account
+        # or if they are an admin
+        if user_to_delete.id != current_user.id and not current_user.is_admin:
+            return {'message': 'Unauthorized action'}, 403
+
+        try:
+            db.session.delete(user_to_delete)
+            db.session.commit()
+            return {'message': 'User deleted successfully'}, 200
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Error deleting user: {e}")
+            return {'message': 'Failed to delete user, please try again later.'}, 500
+        
