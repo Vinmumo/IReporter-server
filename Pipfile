@@ -18,6 +18,7 @@ psycopg2-binary = "*"
 flask-restx = "*"
 flask-jwt-extended = "*"
 cloudinary = "*"
+flask-mail = "*"
 
 [dev-packages]
 
