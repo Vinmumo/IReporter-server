@@ -23,7 +23,7 @@ class Config:
     MAIL_USERNAME = 'vinnymummo@gmail.com'
     MAIL_PASSWORD = 'vzyo avvc ltqz gzvt'
     MAIL_DEFAULT_SENDER = 'vinnymummo@gmail.com'
-    FRONTEND_URL = 'https://i-reporter-client-1.vercel.app/'  
+    FRONTEND_URL = 'https://i-reporter-client-1.vercel.app'  
 
     # CORS settings
-    CORS_ORIGINS = ['https://i-reporter-client-1.vercel.app/']  
+    CORS_ORIGINS = ['https://i-reporter-client-1.vercel.app']  
