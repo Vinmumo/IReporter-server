@@ -28,9 +28,15 @@ class RecordList(Resource):
     @api.marshal_with(record_model)
     @jwt_required()
     def get(self):
-        """Fetch all records for the authenticated user"""
+        """Fetch all records for the authenticated user or all records if admin"""
         current_user = self._get_current_user()
-        records = Record.query.filter_by(user_public_id=current_user.public_id).all()
+
+        if current_user.is_admin:
+            # Admin user fetches all records
+            records = Record.query.all()
+        else:
+            # Regular user fetches only their records
+            records = Record.query.filter_by(user_public_id=current_user.public_id).all()
 
         for record in records:
             record.images = [image.url for image in Image.query.filter_by(record_id=record.id).all()]
