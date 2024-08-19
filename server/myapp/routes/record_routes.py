@@ -1,13 +1,13 @@
 from flask import request, jsonify
 from flask_restx import Namespace, Resource, fields
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from http import HTTPStatus
 from ..models.record import Record, db
 from ..models.image import Image
-from..models.video import Video
+from ..models.video import Video
 from ..models.user import User
 from ..services.email_service import send_status_change_email
 from ..services.cloudinary_services import upload_file
-from http import HTTPStatus
 
 api = Namespace('records', description='Record operations')
 
@@ -26,7 +26,7 @@ class RecordList(Resource):
     @jwt_required()
     def options(self):
         return '', HTTPStatus.OK
-
+    
     @api.doc('list_records')
     @api.marshal_with(record_model)
     @jwt_required()
@@ -39,7 +39,7 @@ class RecordList(Resource):
             record.images = [image.url for image in Image.query.filter_by(record_id=record.id).all()]
             record.videos = [video.url for video in Video.query.filter_by(record_id=record.id).all()]
 
-        return records
+        return records, HTTPStatus.OK
 
     @api.doc('create_record')
     @api.expect(api.parser()
@@ -55,7 +55,6 @@ class RecordList(Resource):
         location = request.form['location']
         record_type = request.form['record_type']
 
-        # Create the record
         new_record = Record(
             description=description,
             location=location,
@@ -65,7 +64,6 @@ class RecordList(Resource):
         db.session.add(new_record)
         db.session.commit()
 
-        # Handle file uploads
         files = request.files.getlist('files')
         for file in files:
             upload_result = upload_file(file)
@@ -98,7 +96,7 @@ class RecordItem(Resource):
     def get(self, public_id):
         """Fetch a single record by its public_id"""
         record = Record.query.filter_by(public_id=public_id).first_or_404()
-        return record
+        return record, HTTPStatus.OK
 
     @api.doc('update_record')
     @api.expect(record_model, validate=True)
@@ -109,11 +107,9 @@ class RecordItem(Resource):
         current_user = RecordList._get_current_user(self)
         record = Record.query.filter_by(public_id=public_id).first_or_404()
 
-        # Only the owner of the record can update description and location
         if record.user_public_id != current_user.public_id:
             api.abort(HTTPStatus.FORBIDDEN, 'Unauthorized')
 
-        # Ensure the record status has not been updated by the admin
         if record.status != 'Under Investigation':
             api.abort(HTTPStatus.BAD_REQUEST, 'Record status cannot be updated by the user')
 
@@ -121,7 +117,7 @@ class RecordItem(Resource):
         record.description = data.get('description', record.description)
         record.location = data.get('location', record.location)
         db.session.commit()
-        return record
+        return record, HTTPStatus.OK
 
     @api.doc('change_record_status')
     @api.expect(record_model, validate=True)
@@ -137,17 +133,14 @@ class RecordItem(Resource):
         data = request.json
         new_status = data.get('status', record.status)
 
-        # Update the record status
         record.status = new_status
         db.session.commit()
 
-        # Get the associated user
         user = User.query.filter_by(public_id=record.user_public_id).first_or_404()
 
-        # Send email to the user about the status change
         send_status_change_email(user.email, record)
 
-        return record
+        return record, HTTPStatus.OK
 
     @api.doc('delete_record')
     @api.response(HTTPStatus.NO_CONTENT, 'Record deleted successfully')
@@ -173,10 +166,8 @@ class RedFlagList(Resource):
         current_user = User.query.filter_by(public_id=current_user_public_id).first_or_404()
 
         if current_user.is_admin:
-            # Admin can view all red-flag records
             red_flags = Record.query.filter_by(record_type='red-flag').all()
         else:
-            # Regular users can only view their own red-flag records
             red_flags = Record.query.filter_by(user_public_id=current_user_public_id, record_type='red-flag').all()
 
         if not red_flags:
@@ -186,7 +177,7 @@ class RedFlagList(Resource):
             record.images = [image.url for image in Image.query.filter_by(record_id=record.id).all()]
             record.videos = [video.url for video in Video.query.filter_by(record_id=record.id).all()]
 
-        return red_flags
+        return red_flags, HTTPStatus.OK
 
 class InterventionList(Resource):
     @api.doc('list_interventions')
@@ -209,7 +200,7 @@ class InterventionList(Resource):
             record.images = [image.url for image in Image.query.filter_by(record_id=record.id).all()]
             record.videos = [video.url for video in Video.query.filter_by(record_id=record.id).all()]
 
-        return interventions
+        return interventions, HTTPStatus.OK
 
 # Register resources 
 api.add_resource(RecordList, '/', strict_slashes=False)
