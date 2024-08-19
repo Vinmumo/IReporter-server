@@ -21,6 +21,9 @@ record_model = api.model('Record', {
 })
 
 class RecordList(Resource):
+    @jwt_required()
+    def options(self):
+            return '', 200 
     @api.doc('list_records')
     @api.marshal_with(record_model)
     @jwt_required()
@@ -80,7 +83,7 @@ class RecordItem(Resource):
             api.abort(403, 'Unauthorized')
 
         # Ensure the record status has not been updated by the admin
-        if record.status != 'pending':
+        if record.status != 'Under Investigation':
             api.abort(400, 'Record status cannot be updated by the user')
 
         data = request.json
@@ -183,7 +186,8 @@ class InterventionList(Resource):
 
 
 # Register resources 
-api.add_resource(RecordList, '/')
-api.add_resource(RecordItem, '/<string:public_id>')
-api.add_resource(RedFlagList, '/red-flags')
-api.add_resource(InterventionList, '/interventions')
+api.add_resource(RecordList, '/', strict_slashes=False)
+api.add_resource(RecordItem, '/<string:public_id>', strict_slashes=False)
+api.add_resource(RedFlagList, '/red-flags', strict_slashes=False)
+api.add_resource(InterventionList, '/interventions', strict_slashes=False)
+
