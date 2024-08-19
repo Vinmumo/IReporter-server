@@ -26,7 +26,7 @@ class RecordList(Resource):
             return '', 200 
     @api.doc('list_records')
     @api.marshal_with(record_model)
-    # @jwt_required()
+    @jwt_required()
     def get(self):
         """Fetch all records for the authenticated user"""
         current_user = self._get_current_user()
