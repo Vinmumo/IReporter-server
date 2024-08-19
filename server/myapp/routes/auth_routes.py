@@ -74,8 +74,8 @@ class Register(Resource):
 
         # Send verification email
         try:
-            send_verification_email(email)
-            # send_test_email(email)
+            # send_verification_email(email)
+            send_test_email(email)
         except Exception as e:
             db.session.delete(new_user)
             db.session.commit()

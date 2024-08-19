@@ -30,9 +30,9 @@ def send_verification_email(user_email):
 def send_test_email(user_email):
     try:
         msg = Message(
-            subject="Test Email",
+            subject="Welcome to IReporter",
             recipients=[user_email],
-            body="This is a test email to check if email sending works."
+            body="Thank you for signing up for IReporter. Dont hesitate to send a report of any corruption case encountered."
         )
         mail.send(msg)
         current_app.logger.info(f"Test email sent to {user_email}")
