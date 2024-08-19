@@ -45,7 +45,7 @@ class RecordList(Resource):
                 .add_argument('location', type=str, required=True, help='The record location')
                 .add_argument('record_type', type=str, required=True, help='The type of record')
                 .add_argument('files', type='file', location='files', required=False, action='append', help='Images or videos associated with the record'))
-    @api.marshal_with(record_model, code=201)
+    @api.marshal_with(record_model)
     @jwt_required()
     def post(self):
         current_user = self._get_current_user()
