@@ -7,6 +7,7 @@ from..models.video import Video
 from ..models.user import User
 from ..services.email_service import send_status_change_email
 from ..services.cloudinary_services import upload_file
+from http import HTTPStatus
 
 api = Namespace('records', description='Record operations')
 
@@ -24,7 +25,8 @@ record_model = api.model('Record', {
 class RecordList(Resource):
     @jwt_required()
     def options(self):
-            return '', 200 
+        return '', HTTPStatus.OK
+
     @api.doc('list_records')
     @api.marshal_with(record_model)
     @jwt_required()
@@ -83,12 +85,11 @@ class RecordList(Resource):
                 db.session.add(new_video)
         
         db.session.commit()
-        return new_record, 201
+        return new_record, HTTPStatus.CREATED
 
     def _get_current_user(self):
         current_user_public_id = get_jwt_identity()
         return User.query.filter_by(public_id=current_user_public_id).first_or_404()
-
 
 class RecordItem(Resource):
     @api.doc('get_record')
@@ -110,11 +111,11 @@ class RecordItem(Resource):
 
         # Only the owner of the record can update description and location
         if record.user_public_id != current_user.public_id:
-            api.abort(403, 'Unauthorized')
+            api.abort(HTTPStatus.FORBIDDEN, 'Unauthorized')
 
         # Ensure the record status has not been updated by the admin
         if record.status != 'Under Investigation':
-            api.abort(400, 'Record status cannot be updated by the user')
+            api.abort(HTTPStatus.BAD_REQUEST, 'Record status cannot be updated by the user')
 
         data = request.json
         record.description = data.get('description', record.description)
@@ -130,7 +131,7 @@ class RecordItem(Resource):
         """Admin can update the status of a record"""
         current_user = RecordList._get_current_user(self)
         if not current_user.is_admin:
-            api.abort(403, 'Unauthorized')
+            api.abort(HTTPStatus.FORBIDDEN, 'Unauthorized')
 
         record = Record.query.filter_by(public_id=public_id).first_or_404()
         data = request.json
@@ -149,18 +150,18 @@ class RecordItem(Resource):
         return record
 
     @api.doc('delete_record')
-    @api.response(204, 'Record deleted successfully')
-    @api.response(403, 'Unauthorized')
+    @api.response(HTTPStatus.NO_CONTENT, 'Record deleted successfully')
+    @api.response(HTTPStatus.FORBIDDEN, 'Unauthorized')
     @jwt_required()
     def delete(self, public_id):
         """Delete a record by its public_id"""
         current_user = RecordList._get_current_user(self)
         record = Record.query.filter_by(public_id=public_id).first_or_404()
         if record.user_public_id != current_user.public_id:
-            api.abort(403, 'Unauthorized')
+            api.abort(HTTPStatus.FORBIDDEN, 'Unauthorized')
         db.session.delete(record)
         db.session.commit()
-        return '', 204
+        return '', HTTPStatus.NO_CONTENT
 
 class RedFlagList(Resource):
     @api.doc('list_red_flags')
@@ -179,12 +180,11 @@ class RedFlagList(Resource):
             red_flags = Record.query.filter_by(user_public_id=current_user_public_id, record_type='red-flag').all()
 
         if not red_flags:
-            return jsonify({'message': 'No red flags found'}), 404
+            return jsonify({'message': 'No red flags found'}), HTTPStatus.NOT_FOUND
         
         for record in red_flags:
             record.images = [image.url for image in Image.query.filter_by(record_id=record.id).all()]
             record.videos = [video.url for video in Video.query.filter_by(record_id=record.id).all()]
-
 
         return red_flags
 
@@ -198,26 +198,21 @@ class InterventionList(Resource):
         current_user = User.query.filter_by(public_id=current_user_public_id).first_or_404()
 
         if current_user.is_admin:
-            
             interventions = Record.query.filter_by(record_type='intervention').all()
         else:
-            
             interventions = Record.query.filter_by(user_public_id=current_user_public_id, record_type='intervention').all()
 
         if not interventions:
-            return jsonify({'message': 'No interventions found'}), 404
+            return jsonify({'message': 'No interventions found'}), HTTPStatus.NOT_FOUND
         
         for record in interventions:
             record.images = [image.url for image in Image.query.filter_by(record_id=record.id).all()]
             record.videos = [video.url for video in Video.query.filter_by(record_id=record.id).all()]
 
-
         return interventions
-
 
 # Register resources 
 api.add_resource(RecordList, '/', strict_slashes=False)
 api.add_resource(RecordItem, '/<string:public_id>', strict_slashes=False)
 api.add_resource(RedFlagList, '/red-flags', strict_slashes=False)
 api.add_resource(InterventionList, '/interventions', strict_slashes=False)
-
