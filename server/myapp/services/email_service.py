@@ -49,3 +49,16 @@ def send_password_reset_email(user_email):
         body=f"To reset your password, click the following link: {reset_url}. If you did not request a password reset, please ignore this email."
     )
     mail.send(msg)
+
+def send_status_change_email(user_email, record):
+    """Send an email notification to the user about the record status change"""
+    try:
+        msg = Message(
+            subject="Record Status Update",
+            recipients=[user_email],
+            body=f"Dear user,\n\nThe status of your record (ID: {record.public_id}) has been updated to '{record.status}'.\n\nThank you."
+        )
+        mail.send(msg)
+        current_app.logger.info(f"Status change email sent to {user_email} for record {record.public_id}")
+    except Exception as e:
+        current_app.logger.error(f"Failed to send status change email to {user_email} for record {record.public_id}: {e}")

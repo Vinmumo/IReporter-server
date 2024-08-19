@@ -5,6 +5,7 @@ from ..models.record import Record, db
 from ..models.image import Image
 from..models.video import Video
 from ..models.user import User
+from ..services.email_service import send_status_change_email
 
 api = Namespace('records', description='Record operations')
 
@@ -100,8 +101,18 @@ class RecordItem(Resource):
 
         record = Record.query.filter_by(public_id=public_id).first_or_404()
         data = request.json
-        record.status = data.get('status', record.status)
+        new_status = data.get('status', record.status)
+
+        # Update the record status
+        record.status = new_status
         db.session.commit()
+
+        # Get the associated user
+        user = User.query.filter_by(public_id=record.user_public_id).first_or_404()
+
+        # Send email to the user about the status change
+        send_status_change_email(user.email, record)
+
         return record
 
     @api.doc('delete_record')
