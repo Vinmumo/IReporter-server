@@ -13,7 +13,8 @@ def create_app():
     app.config.from_object(Config)
 
     # Enable CORS
-    CORS(app, resources={r"/api/*": {"origins": "https://i-reporter-client-1.vercel.app"}}, supports_credentials=True)
+    CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
+
 
     db.init_app(app)
     migrate.init_app(app, db)
