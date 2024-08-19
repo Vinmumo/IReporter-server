@@ -2,6 +2,8 @@ from flask import request, jsonify
 from flask_restx import Namespace, Resource, fields
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models.record import Record, db
+from ..models.image import Image
+from..models.video import Video
 from ..models.user import User
 
 api = Namespace('records', description='Record operations')
@@ -25,6 +27,11 @@ class RecordList(Resource):
         """Fetch all records for the authenticated user"""
         current_user = self._get_current_user()
         records = Record.query.filter_by(user_public_id=current_user.public_id).all()
+
+        for record in records:
+            record.images = [image.url for image in Image.query.filter_by(record_id=record.id).all()]
+            record.videos = [video.url for video in Video.query.filter_by(record_id=record.id).all()]
+
         return records
 
     @api.doc('create_record')
@@ -129,6 +136,11 @@ class RedFlagList(Resource):
 
         if not red_flags:
             return jsonify({'message': 'No red flags found'}), 404
+        
+        for record in red_flags:
+            record.images = [image.url for image in Image.query.filter_by(record_id=record.id).all()]
+            record.videos = [video.url for video in Video.query.filter_by(record_id=record.id).all()]
+
 
         return red_flags
 
@@ -150,6 +162,11 @@ class InterventionList(Resource):
 
         if not interventions:
             return jsonify({'message': 'No interventions found'}), 404
+        
+        for record in interventions:
+            record.images = [image.url for image in Image.query.filter_by(record_id=record.id).all()]
+            record.videos = [video.url for video in Video.query.filter_by(record_id=record.id).all()]
+
 
         return interventions
 
