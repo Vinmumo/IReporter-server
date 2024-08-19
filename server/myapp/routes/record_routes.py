@@ -6,6 +6,7 @@ from ..models.image import Image
 from..models.video import Video
 from ..models.user import User
 from ..services.email_service import send_status_change_email
+from ..services.cloudinary_services import upload_file
 
 api = Namespace('records', description='Record operations')
 
@@ -39,26 +40,55 @@ class RecordList(Resource):
         return records
 
     @api.doc('create_record')
-    @api.expect(record_model, validate=True)
-    @api.marshal_with(record_model)
+    @api.expect(api.parser()
+                .add_argument('description', type=str, required=True, help='The record description')
+                .add_argument('location', type=str, required=True, help='The record location')
+                .add_argument('record_type', type=str, required=True, help='The type of record')
+                .add_argument('files', type='file', location='files', required=False, action='append', help='Images or videos associated with the record'))
+    @api.marshal_with(record_model, code=201)
     @jwt_required()
     def post(self):
-        """Create a new record"""
         current_user = self._get_current_user()
-        data = request.json
+        description = request.form['description']
+        location = request.form['location']
+        record_type = request.form['record_type']
+
+        # Create the record
         new_record = Record(
-            description=data['description'],
-            location=data['location'],
-            record_type=data['record_type'],
+            description=description,
+            location=location,
+            record_type=record_type,
             user_public_id=current_user.public_id
         )
         db.session.add(new_record)
+        db.session.commit()
+
+        # Handle file uploads
+        files = request.files.getlist('files')
+        for file in files:
+            upload_result = upload_file(file)
+            if 'image' in upload_result['resource_type']:
+                new_image = Image(
+                    url=upload_result['url'],
+                    record_id=new_record.id,
+                    user_public_id=current_user.public_id
+                )
+                db.session.add(new_image)
+            elif 'video' in upload_result['resource_type']:
+                new_video = Video(
+                    url=upload_result['url'],
+                    record_id=new_record.id,
+                    user_public_id=current_user.public_id
+                )
+                db.session.add(new_video)
+        
         db.session.commit()
         return new_record, 201
 
     def _get_current_user(self):
         current_user_public_id = get_jwt_identity()
         return User.query.filter_by(public_id=current_user_public_id).first_or_404()
+
 
 class RecordItem(Resource):
     @api.doc('get_record')
