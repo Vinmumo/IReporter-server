@@ -6,7 +6,7 @@ import os
 cloudinary.config(
     cloud_name='dycrqnjcs',
     api_key='314272631384883',
-    api_secret=os.getenv('SECRET_KEY'),
+    api_secret=os.getenv('CLOUDINARY_SECRET_KEY'),
 )
 
 def upload_file(file):
